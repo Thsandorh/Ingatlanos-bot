@@ -193,7 +193,8 @@ async function fetchSearchHtml() {
     return { html: "", via: "direct", status: response.status };
   }
 
-  const fallbackUrl = `${JINA_FALLBACK_BASE}${SEARCH_URL}`;
+  const fallbackTarget = SEARCH_URL.replace(/^https?:\/\//, "");
+  const fallbackUrl = `${JINA_FALLBACK_BASE}${fallbackTarget}`;
   const fallbackResponse = await fetch(fallbackUrl, {
     headers: {
       "User-Agent": USER_AGENT,
