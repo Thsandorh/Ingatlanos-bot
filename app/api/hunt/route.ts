@@ -156,9 +156,14 @@ function extractListings(html: string): Listing[] {
   });
 
   if (listingsMap.size === 0) {
-    const urlMatches = html.match(/https?:\/\/ingatlan\.com\/\d+/gi) ?? [];
-    for (const match of urlMatches) {
-      const externalId = extractIdFromLink(match);
+    const urlMatches = html.match(
+      /(?:https?:\/\/)?(?:www\.)?ingatlan\.com\/\d+/gi
+    ) ?? [];
+    for (const rawMatch of urlMatches) {
+      const normalizedMatch = rawMatch.startsWith("http")
+        ? rawMatch
+        : `https://${rawMatch.replace(/^\/\//, "")}`;
+      const externalId = extractIdFromLink(normalizedMatch);
       if (!externalId || listingsMap.has(externalId)) {
         continue;
       }
