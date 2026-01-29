@@ -172,7 +172,7 @@ function extractListings(html: string): Listing[] {
         externalId,
         price: "",
         location: "",
-        link: normalizedMatch
+        link: match
       });
     }
   }
