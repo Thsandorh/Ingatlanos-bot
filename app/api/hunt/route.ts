@@ -177,7 +177,10 @@ export async function GET() {
   const response = await fetch(SEARCH_URL, {
     headers: {
       "User-Agent": USER_AGENT,
-      Accept: "text/html,application/xhtml+xml"
+      Accept: "text/html,application/xhtml+xml",
+      "Accept-Language": "hu-HU,hu;q=0.9,en-US;q=0.8,en;q=0.7",
+      Referer: "https://ingatlan.com/",
+      "Cache-Control": "no-cache"
     }
   });
 
@@ -186,7 +189,10 @@ export async function GET() {
       {
         ok: false,
         status: response.status,
-        message: "Failed to fetch ingatlan.com listings"
+        message:
+          response.status === 403
+            ? "Failed to fetch ingatlan.com listings (403 blocked). Consider running from Vercel or adding a proxy."
+            : "Failed to fetch ingatlan.com listings"
       },
       { status: response.status }
     );
