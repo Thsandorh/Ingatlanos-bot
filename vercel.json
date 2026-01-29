@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/hunt",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 6 * * *"
     }
   ]
 }

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { load, type Cheerio, type CheerioAPI, type Element } from "cheerio";
+import * as cheerio from "cheerio";
+import type { Cheerio, CheerioAPI } from "cheerio";
+import type { AnyNode } from "domhandler";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
@@ -54,7 +56,7 @@ function toAbsoluteLink(href: string) {
   return `https://ingatlan.com/${href}`;
 }
 
-function extractPrice($node: Cheerio<Element>) {
+function extractPrice($node: Cheerio<AnyNode>) {
   const priceSelectors = [
     "[data-testid='listing-price']",
     "[data-test='listing-price']",
@@ -75,7 +77,7 @@ function extractPrice($node: Cheerio<Element>) {
   return match?.[0] ?? "";
 }
 
-function extractLocation($node: Cheerio<Element>) {
+function extractLocation($node: Cheerio<AnyNode>) {
   const locationSelectors = [
     "[data-testid='listing-location']",
     "[data-test='listing-location']",
@@ -95,7 +97,7 @@ function extractLocation($node: Cheerio<Element>) {
 }
 
 function extractListings(html: string): Listing[] {
-  const $: CheerioAPI = load(html);
+  const $: CheerioAPI = cheerio.load(html);
   const listingsMap = new Map<string, Listing>();
 
   const attributeSelectors = [
