@@ -3,6 +3,7 @@
     {
       "path": "/api/hunt",
       "schedule": "0 6 * * *"
+      "schedule": "*/15 * * * *"
     }
   ]
 }
