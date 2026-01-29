@@ -12,6 +12,7 @@ const SEARCH_URL =
   "https://ingatlan.com/szukites/elado+lakas+budapest+maganszemely";
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const JINA_FALLBACK_BASE = "https://r.jina.ai/http://";
 
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN ??
@@ -173,7 +174,7 @@ async function sendTelegramMessage(message: string) {
   });
 }
 
-export async function GET() {
+async function fetchSearchHtml() {
   const response = await fetch(SEARCH_URL, {
     headers: {
       "User-Agent": USER_AGENT,
@@ -184,21 +185,46 @@ export async function GET() {
     }
   });
 
-  if (!response.ok) {
+  if (response.ok) {
+    return { html: await response.text(), via: "direct" };
+  }
+
+  if (response.status !== 403) {
+    return { html: "", via: "direct", status: response.status };
+  }
+
+  const fallbackUrl = `${JINA_FALLBACK_BASE}${SEARCH_URL}`;
+  const fallbackResponse = await fetch(fallbackUrl, {
+    headers: {
+      "User-Agent": USER_AGENT,
+      Accept: "text/html,application/xhtml+xml"
+    }
+  });
+
+  if (!fallbackResponse.ok) {
+    return { html: "", via: "fallback", status: response.status };
+  }
+
+  return { html: await fallbackResponse.text(), via: "fallback" };
+}
+
+export async function GET() {
+  const { html, via, status } = await fetchSearchHtml();
+
+  if (!html) {
     return NextResponse.json(
       {
         ok: false,
-        status: response.status,
+        status: status ?? 500,
         message:
-          response.status === 403
+          status === 403
             ? "Failed to fetch ingatlan.com listings (403 blocked). Consider running from Vercel or adding a proxy."
             : "Failed to fetch ingatlan.com listings"
       },
-      { status: response.status }
+      { status: status ?? 500 }
     );
   }
 
-  const html = await response.text();
   const scrapedListings = extractListings(html);
   const newListings: Listing[] = [];
 
@@ -235,6 +261,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     scraped: scrapedListings.length,
-    inserted: newListings.length
+    inserted: newListings.length,
+    source: via
   });
 }
