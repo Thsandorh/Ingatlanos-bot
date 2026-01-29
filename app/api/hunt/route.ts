@@ -155,6 +155,23 @@ function extractListings(html: string): Listing[] {
     });
   });
 
+  if (listingsMap.size === 0) {
+    const urlMatches = html.match(/https?:\/\/ingatlan\.com\/\d+/gi) ?? [];
+    for (const match of urlMatches) {
+      const externalId = extractIdFromLink(match);
+      if (!externalId || listingsMap.has(externalId)) {
+        continue;
+      }
+
+      listingsMap.set(externalId, {
+        externalId,
+        price: "",
+        location: "",
+        link: match
+      });
+    }
+  }
+
   return Array.from(listingsMap.values());
 }
 
