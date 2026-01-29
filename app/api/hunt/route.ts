@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { load, type Cheerio, type CheerioAPI } from "cheerio";
 import type { AnyNode } from "domhandler";
+import { load, type Cheerio, type CheerioAPI, type Element } from "cheerio";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { listings } from "@/db/schema";
