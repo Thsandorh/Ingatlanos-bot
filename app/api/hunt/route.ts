@@ -159,11 +159,12 @@ function extractListings(html: string): Listing[] {
     const urlMatches = html.match(
       /(?:https?:\/\/)?(?:www\.)?ingatlan\.com\/\d+/gi
     ) ?? [];
-    for (const rawMatch of urlMatches) {
-      const normalizedMatch = rawMatch.startsWith("http")
-        ? rawMatch
-        : `https://${rawMatch.replace(/^\/\//, "")}`;
-      const externalId = extractIdFromLink(normalizedMatch);
+    for (const candidate of urlMatches) {
+      const normalizedMatch = candidate.startsWith("http")
+        ? candidate
+        : `https://${candidate.replace(/^\/\//, "")}`;
+      const link = normalizedMatch;
+      const externalId = extractIdFromLink(link);
       if (!externalId || listingsMap.has(externalId)) {
         continue;
       }
@@ -172,7 +173,7 @@ function extractListings(html: string): Listing[] {
         externalId,
         price: "",
         location: "",
-        link: match
+        link
       });
     }
   }
