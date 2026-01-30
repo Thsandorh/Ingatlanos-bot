@@ -176,26 +176,6 @@ function extractListings(html: string): Listing[] {
         link
       });
     }
-
-    if (listingsMap.size === 0) {
-      const idMatches = html.match(
-        /(?:data-(?:listing-)?id|listingId)[^0-9]{0,8}(\d{5,})/gi
-      ) ?? [];
-      for (const rawId of idMatches) {
-        const idMatch = rawId.match(/(\d{5,})/);
-        const externalId = idMatch?.[1] ?? "";
-        if (!externalId || listingsMap.has(externalId)) {
-          continue;
-        }
-
-        listingsMap.set(externalId, {
-          externalId,
-          price: "",
-          location: "",
-          link: `https://ingatlan.com/${externalId}`
-        });
-      }
-    }
   }
 
   return Array.from(listingsMap.values());
