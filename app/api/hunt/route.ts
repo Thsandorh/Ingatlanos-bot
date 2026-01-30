@@ -164,12 +164,19 @@ function extractListings(html: string): Listing[] {
     const rawHref = anchor.attr("href") ?? "";
     const match = rawHref.match(idPattern);
     const externalId = match?.[1] || extractIdFromLink(rawHref);
+  }
+
+  $("a[href^='/hirdetes/'], a[href^='/szukites/']").each((_, element) => {
+    const anchor = $(element);
+    const href = toAbsoluteLink(anchor.attr("href") ?? "");
+    const externalId = extractIdFromLink(href);
     if (!externalId || listingsMap.has(externalId)) {
       return;
     }
 
     const link = `https://ingatlan.com/${externalId}`;
     const container = anchor.closest("article, section, li, div");
+    const container = anchor.closest("article, section, div");
     const price = extractPriceFromText(normalizeText(container.text()));
 
     listingsMap.set(externalId, {
@@ -183,6 +190,10 @@ function extractListings(html: string): Listing[] {
   if (process.env.DEBUG_SCRAPER) {
     console.debug("[scraper] fallback listings:", listingsMap.size);
   }
+
+      link: href
+    });
+  });
 
   return Array.from(listingsMap.values());
 }
