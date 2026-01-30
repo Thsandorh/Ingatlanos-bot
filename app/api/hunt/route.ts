@@ -12,7 +12,10 @@ const SEARCH_URL =
   "https://ingatlan.com/szukites/elado+lakas+budapest+maganszemely";
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-const JINA_FALLBACK_BASE = "https://r.jina.ai/http://";
+const JINA_FALLBACK_BASES = [
+  "https://r.jina.ai/https://",
+  "https://r.jina.ai/http://"
+];
 
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN ??
@@ -57,125 +60,128 @@ function toAbsoluteLink(href: string) {
   return `https://ingatlan.com/${href}`;
 }
 
-function extractPrice($node: Cheerio<AnyNode>) {
-  const priceSelectors = [
-    "[data-testid='listing-price']",
-    "[data-test='listing-price']",
-    "[data-testid='price']",
-    ".price",
-    "[class*='price']"
-  ];
+function findListingsInNextData(nextData: unknown): Listing[] {
+  const listingsMap = new Map<string, Listing>();
+  const seen = new Set<unknown>();
 
-  for (const selector of priceSelectors) {
-    const text = normalizeText($node.find(selector).first().text());
-    if (text && /Ft|HUF|\d/.test(text)) {
-      return text;
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== "object") {
+      return;
     }
-  }
 
-  const fallbackText = normalizeText($node.text());
-  const match = fallbackText.match(/\b[\d\s\.]+\s?(Ft|HUF)\b/);
-  return match?.[0] ?? "";
+    if (seen.has(node)) {
+      return;
+    }
+
+    seen.add(node);
+
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+
+    const record = node as Record<string, unknown>;
+    const listingId =
+      typeof record.listingId === "string"
+        ? record.listingId
+        : typeof record.listingId === "number"
+          ? String(record.listingId)
+          : "";
+    const price =
+      typeof record.price === "string"
+        ? record.price
+        : typeof record.price === "number"
+          ? String(record.price)
+          : "";
+    const areaSize =
+      typeof record.areaSize === "string"
+        ? record.areaSize
+        : typeof record.areaSize === "number"
+          ? String(record.areaSize)
+          : "";
+    const location =
+      typeof record.location === "string" ? record.location : "";
+    const link =
+      typeof record.url === "string"
+        ? toAbsoluteLink(record.url)
+        : listingId
+          ? `https://ingatlan.com/${listingId}`
+          : "";
+
+    if (listingId) {
+      listingsMap.set(listingId, {
+        externalId: listingId,
+        price,
+        location: areaSize ? `${location} ${areaSize}`.trim() : location,
+        link
+      });
+    }
+
+    Object.values(record).forEach(visit);
+  };
+
+  visit(nextData);
+  return Array.from(listingsMap.values());
 }
 
-function extractLocation($node: Cheerio<AnyNode>) {
-  const locationSelectors = [
-    "[data-testid='listing-location']",
-    "[data-test='listing-location']",
-    ".listing__address",
-    ".address",
-    "[class*='location']"
-  ];
-
-  for (const selector of locationSelectors) {
-    const text = normalizeText($node.find(selector).first().text());
-    if (text) {
-      return text;
-    }
-  }
-
-  return "";
+function extractPriceFromText(text: string) {
+  const match = text.match(/\b[\d\s,.]+\s?M\s?Ft\b/i);
+  return match?.[0] ?? "";
 }
 
 function extractListings(html: string): Listing[] {
   const $: CheerioAPI = cheerio.load(html);
   const listingsMap = new Map<string, Listing>();
 
-  const attributeSelectors = [
-    "[data-listing-id]",
-    "[data-id]",
-    "[data-ad-id]",
-    "[data-adid]"
-  ];
-
-  for (const selector of attributeSelectors) {
-    $(selector).each((_, element) => {
-      const node = $(element);
-      const rawId =
-        node.attr("data-listing-id") ||
-        node.attr("data-id") ||
-        node.attr("data-ad-id") ||
-        node.attr("data-adid") ||
-        "";
-      const anchor = node.find("a[href]").first();
-      const href = toAbsoluteLink(anchor.attr("href") ?? "");
-      const externalId = rawId || extractIdFromLink(href);
-
-      if (!externalId || !href) {
-        return;
+  const nextDataRaw = $("#__NEXT_DATA__").first().text().trim();
+  if (nextDataRaw) {
+    try {
+      const nextData = JSON.parse(nextDataRaw) as unknown;
+      for (const listing of findListingsInNextData(nextData)) {
+        if (!listing.externalId) {
+          continue;
+        }
+        listingsMap.set(listing.externalId, listing);
       }
-
-      listingsMap.set(externalId, {
-        externalId,
-        price: extractPrice(node),
-        location: extractLocation(node),
-        link: href
-      });
-    });
+    } catch {
+      // ignore JSON parse failures and fall back to anchor scraping
+    }
   }
 
+  if (listingsMap.size > 0) {
+    return Array.from(listingsMap.values());
+  }
+
+  if (process.env.DEBUG_SCRAPER) {
+    const hasIdPattern = /\/\d{7,9}/.test(html);
+    console.debug("[scraper] fallback id pattern found:", hasIdPattern);
+  }
+
+  const idPattern =
+    /^(?:https?:\/\/(?:www\.)?ingatlan\.com)?\/(\d{6,12})(?:[/?#].*)?$/i;
   $("a[href]").each((_, element) => {
     const anchor = $(element);
-    const href = toAbsoluteLink(anchor.attr("href") ?? "");
-    if (!href.includes("ingatlan.com")) {
-      return;
-    }
-
-    const externalId = extractIdFromLink(href);
+    const rawHref = anchor.attr("href") ?? "";
+    const match = rawHref.match(idPattern);
+    const externalId = match?.[1] || extractIdFromLink(rawHref);
     if (!externalId || listingsMap.has(externalId)) {
       return;
     }
 
-    const container = anchor.closest("article, section, div");
+    const link = `https://ingatlan.com/${externalId}`;
+    const container = anchor.closest("article, section, li, div");
+    const price = extractPriceFromText(normalizeText(container.text()));
+
     listingsMap.set(externalId, {
       externalId,
-      price: extractPrice(container),
-      location: extractLocation(container),
-      link: href
+      price,
+      location: "",
+      link
     });
   });
 
-  if (listingsMap.size === 0) {
-    const urlMatches = html.match(
-      /(?:https?:\/\/)?(?:www\.)?ingatlan\.com\/\d+/gi
-    ) ?? [];
-    for (const candidate of urlMatches) {
-      const normalizedMatch = candidate.startsWith("http")
-        ? candidate
-        : `https://${candidate.replace(/^\/\//, "")}`;
-      const link = normalizedMatch;
-      const externalId = extractIdFromLink(link);
-      if (!externalId || listingsMap.has(externalId)) {
-        continue;
-      }
-
-      listingsMap.set(externalId, {
-        externalId,
-        price: "",
-        location: "",
-        link
-      });
-    }
+  if (process.env.DEBUG_SCRAPER) {
+    console.debug("[scraper] fallback listings:", listingsMap.size);
   }
 
   return Array.from(listingsMap.values());
@@ -217,19 +223,27 @@ async function fetchSearchHtml() {
   }
 
   const fallbackTarget = SEARCH_URL.replace(/^https?:\/\//, "");
-  const fallbackUrl = `${JINA_FALLBACK_BASE}${fallbackTarget}`;
-  const fallbackResponse = await fetch(fallbackUrl, {
-    headers: {
-      "User-Agent": USER_AGENT,
-      Accept: "text/html,application/xhtml+xml"
-    }
-  });
 
-  if (!fallbackResponse.ok) {
-    return { html: "", via: "fallback", status: response.status };
+  for (const base of JINA_FALLBACK_BASES) {
+    const fallbackUrl = `${base}${fallbackTarget}`;
+    const fallbackResponse = await fetch(fallbackUrl, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: "text/html,application/xhtml+xml"
+      }
+    });
+
+    if (!fallbackResponse.ok) {
+      continue;
+    }
+
+    const html = await fallbackResponse.text();
+    if (html) {
+      return { html, via: "fallback" };
+    }
   }
 
-  return { html: await fallbackResponse.text(), via: "fallback" };
+  return { html: "", via: "fallback", status: response.status };
 }
 
 export async function GET() {
