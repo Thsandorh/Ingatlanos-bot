@@ -152,6 +152,20 @@ function extractListings(html: string): Listing[] {
     return Array.from(listingsMap.values());
   }
 
+  if (process.env.DEBUG_SCRAPER) {
+    const hasIdPattern = /\/\d{7,9}/.test(html);
+    console.debug("[scraper] fallback id pattern found:", hasIdPattern);
+  }
+
+  const idPattern =
+    /^(?:https?:\/\/(?:www\.)?ingatlan\.com)?\/(\d{6,12})(?:[/?#].*)?$/i;
+  $("a[href]").each((_, element) => {
+    const anchor = $(element);
+    const rawHref = anchor.attr("href") ?? "";
+    const match = rawHref.match(idPattern);
+    const externalId = match?.[1] || extractIdFromLink(rawHref);
+  }
+
   $("a[href^='/hirdetes/'], a[href^='/szukites/']").each((_, element) => {
     const anchor = $(element);
     const href = toAbsoluteLink(anchor.attr("href") ?? "");
@@ -160,6 +174,8 @@ function extractListings(html: string): Listing[] {
       return;
     }
 
+    const link = `https://ingatlan.com/${externalId}`;
+    const container = anchor.closest("article, section, li, div");
     const container = anchor.closest("article, section, div");
     const price = extractPriceFromText(normalizeText(container.text()));
 
@@ -167,6 +183,14 @@ function extractListings(html: string): Listing[] {
       externalId,
       price,
       location: "",
+      link
+    });
+  });
+
+  if (process.env.DEBUG_SCRAPER) {
+    console.debug("[scraper] fallback listings:", listingsMap.size);
+  }
+
       link: href
     });
   });
